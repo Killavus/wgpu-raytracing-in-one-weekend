@@ -167,15 +167,21 @@ async fn main() -> Result<()> {
         Vec3::new(0.0, 0.0, 0.0),
         Vec3::new(0.0, 0.0, -1.0),
         Vec3::new(0.0, 1.0, 0.0),
-        10,
+        100,
         &window,
     );
 
     let mut scene = Scene::default();
+    let material_left = Material::new_dielectric(1.5);
     let material_center = Material::new_lambertian(Vec3::new(0.1, 0.2, 0.5));
+    let material_right = Material::new_metal(Vec3::new(0.8, 0.6, 0.2), 0.0);
     let material_ground = Material::new_lambertian(Vec3::new(0.8, 0.8, 0.0));
 
+    scene.new_sphere(Sphere::new(Vec3::new(-1.0, 0.0, -1.0), 0.5), material_left);
+    scene.new_sphere(Sphere::new(Vec3::new(-1.0, 0.0, -1.0), -0.4), material_left);
     scene.new_sphere(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5), material_center);
+    scene.new_sphere(Sphere::new(Vec3::new(1.0, 0.0, -1.0), 0.5), material_right);
+
     scene.new_sphere(
         Sphere::new(Vec3::new(0.0, -100.5, -1.0), 100.0),
         material_ground,

@@ -54,7 +54,7 @@ struct Materials {
 const pi: f32 = 3.14159265359;
 
 @group(0) @binding(0) var<uniform> cam: Camera;
-@group(1) @binding(0) var raytraced: texture_storage_2d<rgba16float, read_write>;
+@group(1) @binding(0) var raytraced: texture_storage_2d<rgba32float, read_write>;
 @group(1) @binding(1) var<storage> spheresArr: Spheres;
 @group(1) @binding(2) var<storage> materialsArr: Materials;
 @group(1) @binding(3) var<uniform> seed_uniform: SeedUniform;
@@ -116,6 +116,10 @@ fn rayAt(ray: Ray, t: f32) -> vec3<f32> {
 
 fn inside(x: f32, x_min: f32, x_max: f32) -> bool {
     return x > x_min && x < x_max;
+}
+
+fn reflect(direction: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+    return direction - 2.0 * dot(direction, normal) * normal;
 }
 
 fn hitSphere(ray: Ray, sphere: Sphere, t_min: f32, t_max: f32) -> HitRecord {
@@ -227,6 +231,19 @@ fn writePixel(x: u32, y: u32, color: vec3<f32>) {
     textureStore(raytraced, vec2<u32>(x, y), vec4<f32>(current + color, 1.0));
 }
 
+fn reflectance(cosine: f32, ref_idx: f32) -> f32 {
+    var r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
+    r0 = r0 * r0;
+    return r0 + (1.0 - r0) * pow((1.0 - cosine), 5.0);
+}
+
+fn refract(uv: vec3<f32>, n: vec3<f32>, etai_over_etat: f32) -> vec3<f32> {
+    var cos_theta = dot(-uv, n);
+    var r_out_parallel = etai_over_etat * (uv + cos_theta * n);
+    var r_out_perp = -sqrt(1.0 - dot(r_out_parallel, r_out_parallel)) * n;
+    return r_out_parallel + r_out_perp;
+}
+
 @compute
 @workgroup_size(1)
 fn raytrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -269,9 +286,33 @@ fn raytrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 energy = energy * material.albedo;
                 ray.origin = hitRecord.point;
                 ray.direction = direction;
+            } else if material.mat_type == MAT_METAL {
+                energy = energy * material.albedo;
+                ray.origin = hitRecord.point;
+                ray.direction = reflect(ray.direction, hitRecord.normal) + material.fuzz * rand_unit_sphere();
+            } else if material.mat_type == MAT_DIELECTRIC {
+                var refraction_ratio = material.refract_idx;
+                if hitRecord.front_face {
+                    refraction_ratio = 1.0 / refraction_ratio;
+                }
+
+                var unit_direction = normalize(ray.direction);
+                var cos_theta = min(dot(-unit_direction, hitRecord.normal), 1.0);
+                var sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+
+                var cannot_refract = refraction_ratio * sin_theta > 1.0;
+                var direction: vec3<f32>;
+
+                if cannot_refract || reflectance(cos_theta, refraction_ratio) > rand() {
+                    direction = reflect(unit_direction, hitRecord.normal);
+                } else {
+                    direction = refract(unit_direction, hitRecord.normal, refraction_ratio);
+                }
+
+                ray.origin = hitRecord.point;
+                ray.direction = direction;
             } else {
-                var color = vec3<f32>(1.0, 0.0, 0.0);
-                writePixel(global_id.x, global_id.y, energy * color);
+                writePixel(global_id.x, global_id.y, vec3<f32>(1.0, 0.0, 0.0));
                 return;
             }
         } else {
