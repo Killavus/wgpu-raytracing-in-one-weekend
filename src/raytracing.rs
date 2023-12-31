@@ -5,7 +5,6 @@ use encase::ShaderType;
 use anyhow::Result;
 
 pub struct GpuRaytracer {
-    max_bounces: usize,
     pipeline: wgpu::ComputePipeline,
     compute_bg: wgpu::BindGroup,
     spheres_buf: wgpu::Buffer,
@@ -186,7 +185,6 @@ impl GpuRaytracer {
         });
 
         Ok(Self {
-            max_bounces,
             pipeline: compute_pipeline,
             compute_bg,
             spheres_buf,

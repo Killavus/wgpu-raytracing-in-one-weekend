@@ -45,6 +45,8 @@ impl Material {
         }
     }
 
+    // This is for Debug only.
+    #[allow(unused)]
     pub fn new_normal_map() -> Self {
         Material {
             mat_type: 3,

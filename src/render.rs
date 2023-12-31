@@ -137,7 +137,7 @@ impl Renderer {
     }
 
     pub fn on_resize(&mut self, gpu: &Gpu, gpu_camera: &GpuCamera) -> Result<()> {
-        let Gpu { device, queue, .. } = gpu;
+        let Gpu { device, .. } = gpu;
         let camera = gpu_camera.camera();
 
         let new_scene_tex = device.create_texture(&wgpu::TextureDescriptor {
