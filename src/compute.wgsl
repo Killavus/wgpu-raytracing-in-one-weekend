@@ -193,9 +193,5 @@ fn raytrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
         textureStore(raytraced, vec2<u32>(global_id.x, global_id.y), vec4<f32>(color, 1.0));
     }
 
-    var outRay = rays_out[global_id.x + global_id.y * cam.width];
-
-    outRay.direction = ray.direction;
-    outRay.origin = ray.origin;
-    outRay.finished = u32(1);
+    rays_out[global_id.x + global_id.y * cam.width].finished = u32(1);
 }

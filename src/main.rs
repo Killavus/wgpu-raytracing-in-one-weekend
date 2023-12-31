@@ -51,11 +51,11 @@ async fn run(window: Window, event_loop: EventLoop<()>) -> Result<()> {
     let mut renderer = Renderer::new(&gpu, &gpu_camera);
     let mut raytracer = GpuRaytracer::new(&gpu, &gpu_camera, 50, &renderer, scene)?;
 
-    raytracer.compute(&gpu, &gpu_camera)?;
+    raytracer.perform(&gpu, &gpu_camera, &window)?;
 
     use winit::event::{Event, WindowEvent};
 
-    let window = &window;
+    let window: &Window = &window;
     event_loop.run(move |event: Event<()>, target| {
         if let Event::WindowEvent {
             window_id: window_event_id,
@@ -68,15 +68,17 @@ async fn run(window: Window, event_loop: EventLoop<()>) -> Result<()> {
                         renderer.render(&gpu, &gpu_camera).unwrap();
                     }
                     WindowEvent::Resized(new_size) => {
-                        gpu.on_resize((new_size.width, new_size.height));
-                        gpu_camera
-                            .on_resize(&gpu, (new_size.width, new_size.height))
-                            .unwrap();
-                        renderer.on_resize(&gpu, &gpu_camera).unwrap();
-                        raytracer.on_resize(&gpu, &gpu_camera, &renderer).unwrap();
-                        raytracer.compute(&gpu, &gpu_camera).unwrap();
-
-                        window.request_redraw();
+                        if new_size.width != gpu_camera.camera().width
+                            || new_size.height != gpu_camera.camera().height
+                        {
+                            gpu.on_resize((new_size.width, new_size.height));
+                            gpu_camera
+                                .on_resize(&gpu, (new_size.width, new_size.height))
+                                .unwrap();
+                            renderer.on_resize(&gpu, &gpu_camera).unwrap();
+                            raytracer.on_resize(&gpu, &gpu_camera, &renderer).unwrap();
+                            raytracer.perform(&gpu, &gpu_camera, window).unwrap();
+                        }
                     }
                     WindowEvent::CloseRequested => target.exit(),
                     _ => {}

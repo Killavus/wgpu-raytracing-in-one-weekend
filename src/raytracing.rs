@@ -10,6 +10,7 @@ use encase::ShaderType;
 use anyhow::Result;
 
 fn initial_rays(camera: &Camera) -> Vec<Ray> {
+    println!("initial rays");
     let mut rays = Vec::with_capacity((camera.width * camera.height) as usize);
 
     for y in 0..camera.height {
@@ -229,7 +230,7 @@ impl GpuRaytracer {
         })
     }
 
-    pub fn compute(&mut self, gpu: &Gpu, gpu_camera: &GpuCamera) -> Result<()> {
+    fn compute(&mut self, gpu: &Gpu, gpu_camera: &GpuCamera) -> Result<()> {
         let Gpu { device, queue, .. } = gpu;
 
         let mut encoder =
@@ -256,7 +257,7 @@ impl GpuRaytracer {
 
         queue.submit(Some(encoder.finish()));
         device.poll(wgpu::Maintain::Wait);
-
+        self.ping = !self.ping;
         Ok(())
     }
 
@@ -356,6 +357,20 @@ impl GpuRaytracer {
         self.pong_bg = compute_bg_pong;
         self.ping_buf = rays_ping_buf;
         self.pong_buf = rays_pong_buf;
+
+        Ok(())
+    }
+
+    pub fn perform(
+        &mut self,
+        gpu: &Gpu,
+        gpu_camera: &GpuCamera,
+        window: &winit::window::Window,
+    ) -> Result<()> {
+        for _ in 0..self.max_bounces {
+            self.compute(gpu, gpu_camera)?;
+            window.request_redraw();
+        }
 
         Ok(())
     }
