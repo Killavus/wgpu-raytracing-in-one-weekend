@@ -48,7 +48,7 @@ impl Renderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC
@@ -150,30 +150,30 @@ impl Renderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        let new_size = camera.width * camera.height;
-        let old_size = self.scene_tex.size().width * self.scene_tex.size().height;
+        // let new_size = camera.width * camera.height;
+        // let old_size = self.scene_tex.size().width * self.scene_tex.size().height;
 
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        // let mut encoder =
+        //     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-        encoder.copy_texture_to_texture(
-            self.scene_tex.as_image_copy(),
-            new_scene_tex.as_image_copy(),
-            if new_size > old_size {
-                self.scene_tex.size()
-            } else {
-                new_scene_tex.size()
-            },
-        );
+        // encoder.copy_texture_to_texture(
+        //     self.scene_tex.as_image_copy(),
+        //     new_scene_tex.as_image_copy(),
+        //     if new_size > old_size {
+        //         self.scene_tex.size()
+        //     } else {
+        //         new_scene_tex.size()
+        //     },
+        // );
 
-        queue.submit(Some(encoder.finish()));
+        // queue.submit(Some(encoder.finish()));
 
         self.scene_tex = new_scene_tex;
         self.render_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {

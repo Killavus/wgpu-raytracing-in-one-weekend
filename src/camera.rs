@@ -1,5 +1,4 @@
 use crate::gpu::Gpu;
-use crate::ray::Ray;
 use crate::types::*;
 use anyhow::Result;
 use encase::ShaderType;
@@ -7,6 +6,7 @@ use winit::window::Window;
 
 #[derive(ShaderType)]
 pub struct Camera {
+    pub num_samples: u32,
     lookfrom: Vec3,
     lookat: Vec3,
     vup: Vec3,
@@ -42,7 +42,7 @@ impl GpuCamera {
             label: None,
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
+                visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -93,7 +93,7 @@ impl GpuCamera {
 }
 
 impl Camera {
-    pub fn new(lookfrom: Vec3, lookat: Vec3, vup: Vec3, window: &Window) -> Self {
+    pub fn new(lookfrom: Vec3, lookat: Vec3, vup: Vec3, num_samples: u32, window: &Window) -> Self {
         let size = window.inner_size();
         let (image_width, image_height) = (size.width as f32, size.height as f32);
 
@@ -121,6 +121,7 @@ impl Camera {
             lookat,
             vup,
             top_left_pixel,
+            num_samples,
             delta_u,
             delta_v,
             width: image_width as u32,
@@ -161,14 +162,5 @@ impl Camera {
         self.delta_v = delta_v;
         self.width = image_width as u32;
         self.height = image_height as u32;
-    }
-
-    pub fn ray(&self, u: f32, v: f32) -> Ray {
-        let pixel = self.top_left_pixel + (u * self.delta_u) + (v * self.delta_v);
-        let origin = self.lookfrom;
-
-        let direction = pixel - origin;
-
-        Ray::new(origin, direction)
     }
 }

@@ -1,5 +1,8 @@
 struct Camera {
+    num_samples: u32,
     lookfrom: vec3<f32>,
+    lookat: vec3<f32>,
+    vup: vec3<f32>,
     top_left_pixel: vec3<f32>,
     delta_u: vec3<f32>,
     delta_v: vec3<f32>,
@@ -43,5 +46,5 @@ fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var color = textureSample(scene, sceneSampler, in.tex_coords);
-    return vec4<f32>(color.xyz, 1.0);
+    return vec4<f32>(color.xyz / f32(cam.num_samples), 1.0);
 }

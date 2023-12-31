@@ -1,4 +1,5 @@
 struct Camera {
+    num_samples: u32,
     lookfrom: vec3<f32>,
     lookat: vec3<f32>,
     vup: vec3<f32>,
@@ -43,14 +44,10 @@ struct Materials {
 };
 
 
-
 @group(0) @binding(0) var<uniform> cam: Camera;
-
-@group(1) @binding(0) var<storage> rays_in: array<Ray>;
-@group(1) @binding(1) var<storage, read_write> rays_out: array<Ray>;
-@group(1) @binding(2) var raytraced: texture_storage_2d<rgba8unorm, write>;
-@group(1) @binding(3) var<storage> spheresArr: Spheres;
-@group(1) @binding(4) var<storage> materialsArr: Materials;
+@group(1) @binding(0) var raytraced: texture_storage_2d<rgba16float, read_write>;
+@group(1) @binding(1) var<storage> spheresArr: Spheres;
+@group(1) @binding(2) var<storage> materialsArr: Materials;
 
 struct HitRecord {
     hit: bool,
@@ -59,6 +56,24 @@ struct HitRecord {
     normal: vec3<f32>,
     front_face: bool,
 };
+
+// Initializes the random number generator.
+// fn init_rand(invocation_id: vec3u) {
+//     const A = vec3(1741651 * 1009,
+//         140893 * 1609 * 13,
+//         6521 * 983 * 7 * 2);
+//     rnd = (invocation_id * A) ^ common_uniforms.seed;
+// }
+
+// // Returns a random number between 0 and 1.
+// fn rand() -> f32 {
+//     const C = vec3(60493 * 9377,
+//         11279 * 2539 * 23,
+//         7919 * 631 * 5 * 3);
+
+//     rnd = (rnd * C) ^ (rnd.yzx >> vec3(4u));
+//     return f32(rnd.x ^ rnd.y) / 4294967295.0; // 4294967295.0 is f32(0xffffffff). See #337
+// }
 
 fn rayAt(ray: Ray, t: f32) -> vec3<f32> {
     return ray.origin + ray.direction * t;
@@ -152,14 +167,28 @@ fn hitSphere(ray: Ray, sphere: Sphere, t_min: f32, t_max: f32) -> HitRecord {
     return record;
 }
 
+fn initRay(x: f32, y: f32) -> Ray {
+    var origin = cam.lookfrom;
+    var pixel = (cam.top_left_pixel + x * cam.delta_u + y * cam.delta_v);
+    var direction = pixel - origin;
+
+    var ray: Ray;
+    ray.origin = origin;
+    ray.direction = direction;
+    return ray;
+}
+
+fn writePixel(x: u32, y: u32, color: vec3<f32>) {
+    var current = textureLoad(raytraced, vec2<u32>(x, y)).rgb;
+    var colorPart = color;
+    textureStore(raytraced, vec2<u32>(x, y), vec4<f32>(current + colorPart, 1.0));
+}
+
 @compute
 @workgroup_size(1)
 fn raytrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    var ray = rays_in[global_id.x + global_id.y * cam.width];
-
-    if ray.finished == u32(1) {
-        return;
-    }
+    var pixel = vec2<f32>(f32(global_id.x), f32(global_id.y));
+    var ray = initRay(pixel.x, pixel.y);
 
     var t_max = 100000000000.0;
     var sphereIdx = u32(100000);
@@ -181,17 +210,15 @@ fn raytrace(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
         if material.mat_type == u32(3) {
             var color = (hitRecord.normal + 1.0) * 0.5;
-            textureStore(raytraced, vec2<u32>(global_id.x, global_id.y), vec4<f32>(color, 1.0));
+            writePixel(global_id.x, global_id.y, color);
         } else {
             var color = vec3<f32>(1.0, 0.0, 0.0);
-            textureStore(raytraced, vec2<u32>(global_id.x, global_id.y), vec4<f32>(color, 1.0));
+            writePixel(global_id.x, global_id.y, color);
         }
     } else {
         var unit_d = normalize(ray.direction);
         var t = 0.5 * (unit_d.y + 1.0);
         var color = mix(vec3<f32>(1.0, 1.0, 1.0), vec3<f32>(0.5, 0.7, 1.0), t);
-        textureStore(raytraced, vec2<u32>(global_id.x, global_id.y), vec4<f32>(color, 1.0));
+        writePixel(global_id.x, global_id.y, color);
     }
-
-    rays_out[global_id.x + global_id.y * cam.width].finished = u32(1);
 }

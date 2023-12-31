@@ -35,6 +35,7 @@ async fn run(window: Window, event_loop: EventLoop<()>) -> Result<()> {
         Vec3::new(0.0, 0.0, 0.0),
         Vec3::new(0.0, 0.0, -1.0),
         Vec3::new(0.0, 1.0, 0.0),
+        10,
         &window,
     );
 
@@ -76,7 +77,7 @@ async fn run(window: Window, event_loop: EventLoop<()>) -> Result<()> {
                                 .on_resize(&gpu, (new_size.width, new_size.height))
                                 .unwrap();
                             renderer.on_resize(&gpu, &gpu_camera).unwrap();
-                            raytracer.on_resize(&gpu, &gpu_camera, &renderer).unwrap();
+                            raytracer.on_resize(&gpu, &renderer).unwrap();
                             raytracer.perform(&gpu, &gpu_camera, window).unwrap();
                         }
                     }
