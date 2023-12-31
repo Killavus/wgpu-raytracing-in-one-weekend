@@ -77,8 +77,8 @@ async fn run(event_loop: EventLoop<()>, app: Arc<App>) -> Result<()> {
                     }
                     WindowEvent::KeyboardInput { event, .. } => {
                         if event.state == winit::event::ElementState::Pressed {
-                            match event.physical_key {
-                                PhysicalKey::Code(key) => match key {
+                            if let PhysicalKey::Code(key) = event.physical_key {
+                                match key {
                                     KeyCode::KeyR => {
                                         app.recompute().unwrap();
                                     }
@@ -94,9 +94,14 @@ async fn run(event_loop: EventLoop<()>, app: Arc<App>) -> Result<()> {
                                     KeyCode::KeyD => {
                                         app.on_camera_change(CameraChange::Right).unwrap();
                                     }
+                                    KeyCode::KeyQ => {
+                                        app.on_camera_change(CameraChange::Up).unwrap();
+                                    }
+                                    KeyCode::KeyZ => {
+                                        app.on_camera_change(CameraChange::Down).unwrap();
+                                    }
                                     _ => {}
-                                },
-                                _ => {}
+                                }
                             }
                         }
                     }

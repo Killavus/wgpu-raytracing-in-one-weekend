@@ -9,6 +9,8 @@ pub enum CameraChange {
     Backward,
     Left,
     Right,
+    Up,
+    Down,
 }
 
 #[derive(ShaderType)]
@@ -181,6 +183,8 @@ impl Camera {
         self.height = image_height as u32;
     }
 
+    const MOVE_FACTOR: f32 = 0.1;
+
     pub fn on_camera_change(&mut self, change: CameraChange) {
         let Self {
             lookfrom,
@@ -193,12 +197,15 @@ impl Camera {
 
         let w = (*lookfrom - *lookat).normalize();
         let u = vup.cross(&w).normalize();
+        let v = w.cross(&u);
 
         match change {
-            CameraChange::Forward => *lookfrom -= w * 0.02,
-            CameraChange::Backward => *lookfrom += w * 0.02,
-            CameraChange::Left => *lookfrom -= u * 0.02,
-            CameraChange::Right => *lookfrom += u * 0.02,
+            CameraChange::Forward => *lookfrom -= w * Self::MOVE_FACTOR,
+            CameraChange::Backward => *lookfrom += w * Self::MOVE_FACTOR,
+            CameraChange::Left => *lookfrom -= u * Self::MOVE_FACTOR,
+            CameraChange::Right => *lookfrom += u * Self::MOVE_FACTOR,
+            CameraChange::Up => *lookfrom += v * Self::MOVE_FACTOR,
+            CameraChange::Down => *lookfrom -= v * Self::MOVE_FACTOR,
         }
 
         *lookat = *lookfrom - w;

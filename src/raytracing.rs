@@ -223,7 +223,6 @@ impl GpuRaytracer {
         }
 
         queue.submit(Some(encoder.finish()));
-        device.poll(wgpu::Maintain::Wait);
         Ok(())
     }
 
