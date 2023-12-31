@@ -14,7 +14,7 @@ mod render;
 mod scene;
 mod types;
 
-use camera::{Camera, GpuCamera};
+use camera::{Camera, CameraChange, GpuCamera};
 use render::Renderer;
 use scene::{Material, Scene, Sphere};
 use types::*;
@@ -82,6 +82,18 @@ async fn run(event_loop: EventLoop<()>, app: Arc<App>) -> Result<()> {
                                     KeyCode::KeyR => {
                                         app.recompute().unwrap();
                                     }
+                                    KeyCode::KeyW => {
+                                        app.on_camera_change(CameraChange::Forward).unwrap();
+                                    }
+                                    KeyCode::KeyS => {
+                                        app.on_camera_change(CameraChange::Backward).unwrap();
+                                    }
+                                    KeyCode::KeyA => {
+                                        app.on_camera_change(CameraChange::Left).unwrap();
+                                    }
+                                    KeyCode::KeyD => {
+                                        app.on_camera_change(CameraChange::Right).unwrap();
+                                    }
                                     _ => {}
                                 },
                                 _ => {}
@@ -131,6 +143,13 @@ impl App {
             .read()
             .unwrap()
             .clear(&self.gpu.read().unwrap());
+    }
+
+    fn on_camera_change(&self, change: CameraChange) -> Result<()> {
+        let mut gpu_camera = self.gpu_camera.write().unwrap();
+        gpu_camera.on_camera_change(&self.gpu.read().unwrap(), change)?;
+        self.recompute()?;
+        Ok(())
     }
 
     fn on_resize(&self, new_size: PhysicalSize<u32>) -> Result<()> {

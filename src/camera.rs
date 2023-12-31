@@ -4,6 +4,13 @@ use anyhow::Result;
 use encase::ShaderType;
 use winit::window::Window;
 
+pub enum CameraChange {
+    Forward,
+    Backward,
+    Left,
+    Right,
+}
+
 #[derive(ShaderType)]
 pub struct Camera {
     pub num_samples: u32,
@@ -79,6 +86,16 @@ impl GpuCamera {
         Ok(())
     }
 
+    pub fn on_camera_change(&mut self, gpu: &Gpu, change: CameraChange) -> Result<()> {
+        self.camera.on_camera_change(change);
+
+        let Gpu { queue, .. } = gpu;
+        let mut camera_buf = encase::UniformBuffer::new(vec![]);
+        camera_buf.write(&self.camera)?;
+        queue.write_buffer(&self.camera_buf, 0, camera_buf.into_inner().as_slice());
+        Ok(())
+    }
+
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.camera_bgl
     }
@@ -138,6 +155,55 @@ impl Camera {
         } = self;
 
         let (image_width, image_height) = (image_width as f32, image_height as f32);
+        let aspect_ratio = image_width / image_height;
+
+        let focal_length = (*lookat - *lookfrom).norm();
+        let viewport_height = 2.0 * focal_length;
+        let viewport_width = viewport_height * aspect_ratio;
+
+        let w = (*lookfrom - *lookat).normalize();
+        let u = vup.cross(&w).normalize();
+        let v = w.cross(&u);
+
+        let viewport_u = u * viewport_width;
+        let viewport_v = -v * viewport_height;
+
+        let delta_u = viewport_u / image_width;
+        let delta_v = viewport_v / image_height;
+
+        let top_left = *lookfrom - (focal_length * w) - viewport_u / 2.0 - viewport_v / 2.0;
+        let top_left_pixel = top_left + 0.5 * (delta_u + delta_v);
+
+        self.top_left_pixel = top_left_pixel;
+        self.delta_u = delta_u;
+        self.delta_v = delta_v;
+        self.width = image_width as u32;
+        self.height = image_height as u32;
+    }
+
+    pub fn on_camera_change(&mut self, change: CameraChange) {
+        let Self {
+            lookfrom,
+            lookat,
+            vup,
+            width,
+            height,
+            ..
+        } = self;
+
+        let w = (*lookfrom - *lookat).normalize();
+        let u = vup.cross(&w).normalize();
+
+        match change {
+            CameraChange::Forward => *lookfrom -= w * 0.02,
+            CameraChange::Backward => *lookfrom += w * 0.02,
+            CameraChange::Left => *lookfrom -= u * 0.02,
+            CameraChange::Right => *lookfrom += u * 0.02,
+        }
+
+        *lookat = *lookfrom - w;
+
+        let (image_width, image_height) = (*width as f32, *height as f32);
         let aspect_ratio = image_width / image_height;
 
         let focal_length = (*lookat - *lookfrom).norm();
