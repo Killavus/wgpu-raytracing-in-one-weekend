@@ -207,7 +207,7 @@ impl Renderer {
         } = gpu;
 
         let frame = surface.get_current_texture()?;
-        let frame_tex_view = frame
+        let frame_tex_view: wgpu::TextureView = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -238,6 +238,14 @@ impl Renderer {
         queue.submit(Some(encoder.finish()));
         frame.present();
         Ok(())
+    }
+
+    pub fn clear(&self, gpu: &Gpu) {
+        let Gpu { device, queue, .. } = gpu;
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.clear_texture(&self.scene_tex, &wgpu::ImageSubresourceRange::default());
+        queue.submit(Some(encoder.finish()));
     }
 
     pub fn scene_texture(&self) -> &wgpu::Texture {

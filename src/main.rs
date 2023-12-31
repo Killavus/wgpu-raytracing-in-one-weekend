@@ -110,6 +110,13 @@ impl App {
         Ok(())
     }
 
+    fn clear(&self) {
+        self.renderer
+            .read()
+            .unwrap()
+            .clear(&self.gpu.read().unwrap());
+    }
+
     fn on_resize(&self, new_size: PhysicalSize<u32>) -> Result<()> {
         let mut changed = false;
         {
@@ -186,6 +193,7 @@ async fn main() -> Result<()> {
                 match msg {
                     TracerMsg::Quit => break,
                     TracerMsg::Recompute => {
+                        app.clear();
                         app.perform().unwrap();
                     }
                 }
