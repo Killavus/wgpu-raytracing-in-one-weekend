@@ -2,6 +2,7 @@ use anyhow::Result;
 
 use raytracing::GpuRaytracer;
 use tokio::task::JoinHandle;
+use winit::keyboard::KeyCode;
 use winit::window::Window;
 use winit::{dpi::PhysicalSize, event_loop::EventLoop};
 
@@ -60,6 +61,8 @@ async fn run(event_loop: EventLoop<()>, app: Arc<App>) -> Result<()> {
             event,
         } = event
         {
+            use winit::keyboard::PhysicalKey;
+
             if window_event_id == window.id() {
                 match event {
                     WindowEvent::RedrawRequested => {
@@ -71,6 +74,19 @@ async fn run(event_loop: EventLoop<()>, app: Arc<App>) -> Result<()> {
                     WindowEvent::CloseRequested => {
                         app.quit().unwrap();
                         target.exit();
+                    }
+                    WindowEvent::KeyboardInput { event, .. } => {
+                        if event.state == winit::event::ElementState::Pressed {
+                            match event.physical_key {
+                                PhysicalKey::Code(key) => match key {
+                                    KeyCode::KeyR => {
+                                        app.recompute().unwrap();
+                                    }
+                                    _ => {}
+                                },
+                                _ => {}
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -151,7 +167,7 @@ async fn main() -> Result<()> {
         Vec3::new(0.0, 0.0, 0.0),
         Vec3::new(0.0, 0.0, -1.0),
         Vec3::new(0.0, 1.0, 0.0),
-        20,
+        10,
         &window,
     );
 
