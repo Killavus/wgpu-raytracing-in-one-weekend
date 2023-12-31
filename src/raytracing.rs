@@ -3,6 +3,7 @@ use crate::{
     gpu::Gpu,
     ray::Ray,
     render::Renderer,
+    scene::Scene,
 };
 use encase::ShaderType;
 
@@ -26,6 +27,11 @@ pub struct GpuRaytracer {
     pipeline: wgpu::ComputePipeline,
     ping_bg: wgpu::BindGroup,
     pong_bg: wgpu::BindGroup,
+    ping_buf: wgpu::Buffer,
+    pong_buf: wgpu::Buffer,
+    spheres_buf: wgpu::Buffer,
+    mats_buf: wgpu::Buffer,
+    compute_bgl: wgpu::BindGroupLayout,
 }
 
 impl GpuRaytracer {
@@ -34,6 +40,7 @@ impl GpuRaytracer {
         gpu_camera: &GpuCamera,
         max_bounces: usize,
         renderer: &Renderer,
+        scene: Scene,
     ) -> Result<Self> {
         use wgpu::util::DeviceExt;
 
@@ -60,6 +67,20 @@ impl GpuRaytracer {
             size: Ray::min_size().get()
                 * (gpu_camera.camera().width * gpu_camera.camera().height) as u64,
             mapped_at_creation: false,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let (spheres, mats) = scene.into_gpu_buffers()?;
+
+        let spheres_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: spheres.into_inner().as_slice(),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let mats_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: mats.into_inner().as_slice(),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -96,6 +117,26 @@ impl GpuRaytracer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -118,6 +159,14 @@ impl GpuRaytracer {
                             .scene_texture()
                             .create_view(&wgpu::TextureViewDescriptor::default()),
                     ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: spheres_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: mats_buf.as_entire_binding(),
                 },
             ],
         });
@@ -142,6 +191,14 @@ impl GpuRaytracer {
                             .create_view(&wgpu::TextureViewDescriptor::default()),
                     ),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: spheres_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: mats_buf.as_entire_binding(),
+                },
             ],
         });
 
@@ -164,6 +221,11 @@ impl GpuRaytracer {
             pipeline: compute_pipeline,
             ping_bg: compute_bg_ping,
             pong_bg: compute_bg_pong,
+            ping_buf: rays_ping_buf,
+            pong_buf: rays_pong_buf,
+            spheres_buf,
+            mats_buf,
+            compute_bgl,
         })
     }
 
@@ -194,6 +256,106 @@ impl GpuRaytracer {
 
         queue.submit(Some(encoder.finish()));
         device.poll(wgpu::Maintain::Wait);
+
+        Ok(())
+    }
+
+    pub fn on_resize(
+        &mut self,
+        gpu: &Gpu,
+        gpu_camera: &GpuCamera,
+        renderer: &Renderer,
+    ) -> Result<()> {
+        use wgpu::util::DeviceExt;
+        self.ping = true;
+
+        let Gpu { device, .. } = gpu;
+
+        let initial_rays: Vec<Ray> = initial_rays(gpu_camera.camera());
+
+        let mut rays_buf_ping = encase::StorageBuffer::new(vec![]);
+        rays_buf_ping.write(&initial_rays)?;
+
+        let rays_ping_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: rays_buf_ping.into_inner().as_slice(),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let rays_pong_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: Ray::min_size().get()
+                * (gpu_camera.camera().width * gpu_camera.camera().height) as u64,
+            mapped_at_creation: false,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let compute_bg_ping = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.compute_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: rays_ping_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: rays_pong_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(
+                        &renderer
+                            .scene_texture()
+                            .create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.spheres_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.mats_buf.as_entire_binding(),
+                },
+            ],
+        });
+
+        let compute_bg_pong = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.compute_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: rays_pong_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: rays_ping_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(
+                        &renderer
+                            .scene_texture()
+                            .create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.spheres_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.mats_buf.as_entire_binding(),
+                },
+            ],
+        });
+
+        self.ping_bg = compute_bg_ping;
+        self.pong_bg = compute_bg_pong;
+        self.ping_buf = rays_ping_buf;
+        self.pong_buf = rays_pong_buf;
 
         Ok(())
     }

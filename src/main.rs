@@ -4,34 +4,18 @@ use raytracing::GpuRaytracer;
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 
-use encase::ShaderType;
-use nalgebra as na;
-
 mod camera;
 mod gpu;
 mod ray;
 mod raytracing;
 mod render;
+mod scene;
 mod types;
 
-use crate::types::*;
-
-use crate::render::Renderer;
 use camera::{Camera, GpuCamera};
-
-#[derive(ShaderType)]
-struct Sphere {
-    center: na::Vector3<f32>,
-    radius: f32,
-}
-
-impl Sphere {
-    fn new(center: na::Vector3<f32>, radius: f32) -> Self {
-        Sphere { center, radius }
-    }
-}
-
-use gpu::Gpu;
+use render::Renderer;
+use scene::{Material, Scene, Sphere};
+use types::*;
 
 fn create_window() -> Result<(Window, EventLoop<()>)> {
     use winit::window::WindowBuilder;
@@ -54,9 +38,18 @@ async fn run(window: Window, event_loop: EventLoop<()>) -> Result<()> {
         &window,
     );
 
-    let gpu_camera: GpuCamera = GpuCamera::new(&gpu, camera)?;
-    let renderer = Renderer::new(&gpu, &gpu_camera);
-    let mut raytracer = GpuRaytracer::new(&gpu, &gpu_camera, 50, &renderer)?;
+    let mut scene = Scene::default();
+    let material_ground = Material::new_normal_map();
+
+    scene.new_sphere(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5), material_ground);
+    scene.new_sphere(
+        Sphere::new(Vec3::new(0.0, -100.5, -1.0), 100.0),
+        material_ground,
+    );
+
+    let mut gpu_camera: GpuCamera = GpuCamera::new(&gpu, camera)?;
+    let mut renderer = Renderer::new(&gpu, &gpu_camera);
+    let mut raytracer = GpuRaytracer::new(&gpu, &gpu_camera, 50, &renderer, scene)?;
 
     raytracer.compute(&gpu, &gpu_camera)?;
 
@@ -76,6 +69,13 @@ async fn run(window: Window, event_loop: EventLoop<()>) -> Result<()> {
                     }
                     WindowEvent::Resized(new_size) => {
                         gpu.on_resize((new_size.width, new_size.height));
+                        gpu_camera
+                            .on_resize(&gpu, (new_size.width, new_size.height))
+                            .unwrap();
+                        renderer.on_resize(&gpu, &gpu_camera).unwrap();
+                        raytracer.on_resize(&gpu, &gpu_camera, &renderer).unwrap();
+                        raytracer.compute(&gpu, &gpu_camera).unwrap();
+
                         window.request_redraw();
                     }
                     WindowEvent::CloseRequested => target.exit(),
@@ -91,9 +91,7 @@ async fn run(window: Window, event_loop: EventLoop<()>) -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let (window, event_loop) = create_window()?;
-
     run(window, event_loop).await?;
 
-    println!("Hello, world!");
     Ok(())
 }

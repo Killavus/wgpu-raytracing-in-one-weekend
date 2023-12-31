@@ -8,6 +8,8 @@ use winit::window::Window;
 #[derive(ShaderType)]
 pub struct Camera {
     lookfrom: Vec3,
+    lookat: Vec3,
+    vup: Vec3,
     top_left_pixel: Vec3,
     delta_u: Vec3,
     delta_v: Vec3,
@@ -67,6 +69,16 @@ impl GpuCamera {
         })
     }
 
+    pub fn on_resize(&mut self, gpu: &Gpu, new_size: (u32, u32)) -> Result<()> {
+        self.camera.on_resize(new_size);
+
+        let Gpu { queue, .. } = gpu;
+        let mut camera_buf = encase::UniformBuffer::new(vec![]);
+        camera_buf.write(&self.camera)?;
+        queue.write_buffer(&self.camera_buf, 0, camera_buf.into_inner().as_slice());
+        Ok(())
+    }
+
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.camera_bgl
     }
@@ -91,7 +103,7 @@ impl Camera {
         let viewport_height = 2.0 * focal_length;
         let viewport_width = viewport_height * aspect_ratio;
 
-        let w = (lookfrom - lookat).cross(&vup).normalize();
+        let w = (lookfrom - lookat).normalize();
         let u = vup.cross(&w).normalize();
         let v = w.cross(&u);
 
@@ -102,16 +114,53 @@ impl Camera {
         let delta_v = viewport_v / image_height;
 
         let top_left = lookfrom - (focal_length * w) - viewport_u / 2.0 - viewport_v / 2.0;
-        let top_left_pixel = top_left.add_scalar(0.5) + delta_u / 2.0 + delta_v / 2.0;
+        let top_left_pixel = top_left + 0.5 * (delta_u + delta_v);
 
         Camera {
             lookfrom,
+            lookat,
+            vup,
             top_left_pixel,
             delta_u,
             delta_v,
             width: image_width as u32,
             height: image_height as u32,
         }
+    }
+
+    pub fn on_resize(&mut self, (image_width, image_height): (u32, u32)) {
+        let Self {
+            lookfrom,
+            lookat,
+            vup,
+            ..
+        } = self;
+
+        let (image_width, image_height) = (image_width as f32, image_height as f32);
+        let aspect_ratio = image_width / image_height;
+
+        let focal_length = (*lookat - *lookfrom).norm();
+        let viewport_height = 2.0 * focal_length;
+        let viewport_width = viewport_height * aspect_ratio;
+
+        let w = (*lookfrom - *lookat).normalize();
+        let u = vup.cross(&w).normalize();
+        let v = w.cross(&u);
+
+        let viewport_u = u * viewport_width;
+        let viewport_v = -v * viewport_height;
+
+        let delta_u = viewport_u / image_width;
+        let delta_v = viewport_v / image_height;
+
+        let top_left = *lookfrom - (focal_length * w) - viewport_u / 2.0 - viewport_v / 2.0;
+        let top_left_pixel = top_left + 0.5 * (delta_u + delta_v);
+
+        self.top_left_pixel = top_left_pixel;
+        self.delta_u = delta_u;
+        self.delta_v = delta_v;
+        self.width = image_width as u32;
+        self.height = image_height as u32;
     }
 
     pub fn ray(&self, u: f32, v: f32) -> Ray {

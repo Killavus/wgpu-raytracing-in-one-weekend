@@ -46,7 +46,7 @@ async fn get_gpu(window: &Window) -> Result<Gpu> {
         .await?;
 
     let swapchain_capabilities = surface.get_capabilities(&adapter);
-    let swapchain_format = swapchain_capabilities.formats[0];
+    let swapchain_format = wgpu::TextureFormat::Rgba8Unorm;
 
     let surface_config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

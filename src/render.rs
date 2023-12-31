@@ -4,16 +4,17 @@ use anyhow::Result;
 
 pub struct Renderer {
     scene_tex: wgpu::Texture,
+    sampler: wgpu::Sampler,
     pipeline: wgpu::RenderPipeline,
     render_bg: wgpu::BindGroup,
+    render_bgl: wgpu::BindGroupLayout,
 }
 
 impl Renderer {
     pub fn new(gpu: &Gpu, gpu_camera: &GpuCamera) -> Self {
         let Gpu { device, .. } = gpu;
 
-        let swapchain_capabilities = gpu.surface.get_capabilities(&gpu.adapter);
-        let swap_format = swapchain_capabilities.formats[0];
+        let swap_format = wgpu::TextureFormat::Rgba8Unorm;
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
@@ -48,7 +49,10 @@ impl Renderer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
 
@@ -127,7 +131,71 @@ impl Renderer {
             scene_tex,
             pipeline,
             render_bg,
+            render_bgl,
+            sampler: scene_sampler,
         }
+    }
+
+    pub fn on_resize(&mut self, gpu: &Gpu, gpu_camera: &GpuCamera) -> Result<()> {
+        let Gpu { device, queue, .. } = gpu;
+        let camera = gpu_camera.camera();
+
+        let new_scene_tex = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: camera.width,
+                height: camera.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let new_size = camera.width * camera.height;
+        let old_size = self.scene_tex.size().width * self.scene_tex.size().height;
+
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        encoder.copy_texture_to_texture(
+            self.scene_tex.as_image_copy(),
+            new_scene_tex.as_image_copy(),
+            if new_size > old_size {
+                self.scene_tex.size()
+            } else {
+                new_scene_tex.size()
+            },
+        );
+
+        queue.submit(Some(encoder.finish()));
+
+        self.scene_tex = new_scene_tex;
+        self.render_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.render_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &self
+                            .scene_tex
+                            .create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
+
+        Ok(())
     }
 
     pub fn render(&self, gpu: &Gpu, gpu_camera: &GpuCamera) -> Result<()> {
