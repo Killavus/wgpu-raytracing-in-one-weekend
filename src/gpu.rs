@@ -24,6 +24,7 @@ impl Gpu {
 
 async fn get_gpu(window: &Window) -> Result<Gpu> {
     let instance = wgpu::Instance::default();
+
     let surface = unsafe { instance.create_surface(&window)? };
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
@@ -46,7 +47,7 @@ async fn get_gpu(window: &Window) -> Result<Gpu> {
         .await?;
 
     let swapchain_capabilities = surface.get_capabilities(&adapter);
-    let swapchain_format = wgpu::TextureFormat::Rgba8Unorm;
+    let swapchain_format = wgpu::TextureFormat::Rgba8UnormSrgb;
 
     let surface_config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

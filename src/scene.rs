@@ -76,7 +76,7 @@ impl Sphere {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Scene {
     spheres: Vec<SceneSphere>,
     mats: Vec<Material>,

@@ -1,4 +1,6 @@
+use crate::types::*;
 use crate::{camera::GpuCamera, gpu::Gpu, render::Renderer, scene::Scene};
+use encase::ShaderType;
 
 use anyhow::Result;
 
@@ -8,7 +10,30 @@ pub struct GpuRaytracer {
     compute_bg: wgpu::BindGroup,
     spheres_buf: wgpu::Buffer,
     mats_buf: wgpu::Buffer,
+    seed_buf: wgpu::Buffer,
+    limits_buf: wgpu::Buffer,
     compute_bgl: wgpu::BindGroupLayout,
+}
+
+#[derive(ShaderType, Debug)]
+struct SeedUniform {
+    seed: Vec3U,
+}
+
+#[derive(ShaderType)]
+struct LimitUniform {
+    max_bounces: u32,
+}
+
+fn generate_seed() -> Vec3U {
+    use rand::Rng;
+
+    let mut rng = rand::thread_rng();
+    let x = rng.gen();
+    let y = rng.gen();
+    let z = rng.gen();
+
+    Vec3U::new(x, y, z)
 }
 
 impl GpuRaytracer {
@@ -40,6 +65,24 @@ impl GpuRaytracer {
             label: None,
             contents: mats.into_inner().as_slice(),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let seed_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: SeedUniform::min_size().get(),
+            mapped_at_creation: false,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let mut limits = encase::UniformBuffer::new(vec![]);
+        limits.write(&LimitUniform {
+            max_bounces: max_bounces as u32,
+        })?;
+
+        let limits_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: limits.into_inner().as_slice(),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let compute_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -75,6 +118,26 @@ impl GpuRaytracer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -98,6 +161,14 @@ impl GpuRaytracer {
                     binding: 2,
                     resource: mats_buf.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: seed_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: limits_buf.as_entire_binding(),
+                },
             ],
         });
 
@@ -119,13 +190,23 @@ impl GpuRaytracer {
             pipeline: compute_pipeline,
             compute_bg,
             spheres_buf,
+            seed_buf,
             mats_buf,
+            limits_buf,
             compute_bgl,
         })
     }
 
-    fn compute(&mut self, gpu: &Gpu, gpu_camera: &GpuCamera) -> Result<()> {
+    fn compute(&self, gpu: &Gpu, gpu_camera: &GpuCamera) -> Result<()> {
         let Gpu { device, queue, .. } = gpu;
+        let mut seed_uniform = encase::UniformBuffer::new(vec![]);
+
+        let seed_uniform_contents = SeedUniform {
+            seed: generate_seed(),
+        };
+
+        seed_uniform.write(&seed_uniform_contents)?;
+        queue.write_buffer(&self.seed_buf, 0, seed_uniform.into_inner().as_slice());
 
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -169,6 +250,14 @@ impl GpuRaytracer {
                     binding: 2,
                     resource: self.mats_buf.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.seed_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.limits_buf.as_entire_binding(),
+                },
             ],
         });
 
@@ -177,7 +266,7 @@ impl GpuRaytracer {
     }
 
     pub fn perform(
-        &mut self,
+        &self,
         gpu: &Gpu,
         gpu_camera: &GpuCamera,
         window: &winit::window::Window,

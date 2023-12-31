@@ -14,7 +14,7 @@ impl Renderer {
     pub fn new(gpu: &Gpu, gpu_camera: &GpuCamera) -> Self {
         let Gpu { device, .. } = gpu;
 
-        let swap_format = wgpu::TextureFormat::Rgba8Unorm;
+        let swap_format = wgpu::TextureFormat::Rgba8UnormSrgb;
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
